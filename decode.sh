@@ -36,36 +36,12 @@ if not m:
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# VLESS outbound
-vless_outbound = {
-    'type': 'vless',
-    'tag': 'proxy',
-    'server': host,
-    'server_port': int(port),
-    'uuid': uuid,
-    'network': 'tcp',
-    'tls': {
-        'enabled': True,
-        'server_name': p.get('sni'),
-        'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
-        'reality': {
-            'public_key': p.get('pbk'),
-            'short_id': p.get('sid', '')
-        }
-    }
-}
-if p.get('flow'):
-    vless_outbound['flow'] = p['flow']
-
 # CONFIG FOR SING-BOX 1.13.13
 cfg = {
     'log': {'level': 'info'},
     'dns': {
         'servers': [
-            # 1. Remote DNS: TCP over the proxy. Safe from interception, avoids nested TLS overhead.
             {'tag': 'remote', 'type': 'tcp', 'server': '8.8.8.8', 'detour': 'proxy'},
-            # 2. Local DNS: Encrypted DoH. Prevents the ISP from poisoning the proxy's domain resolution.
-            # Explicitly routed 'direct' to avoid a circular dependency loop.
             {'tag': 'local', 'type': 'https', 'server': '1.1.1.1', 'detour': 'direct'}
         ],
         'final': 'remote',
@@ -81,7 +57,24 @@ cfg = {
         'mtu': 1350
     }],
     'outbounds': [
-        vless_outbound,
+        {
+            'type': 'vless',
+            'tag': 'proxy',
+            'server': host,
+            'server_port': int(port),
+            'uuid': uuid,
+            'flow': p.get('flow', ''),
+            'network': 'tcp',
+            'tls': {
+                'enabled': True,
+                'server_name': p.get('sni'),
+                'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
+                'reality': {
+                    'public_key': p.get('pbk'),
+                    'short_id': p.get('sid', '')
+                }
+            }
+        },
         {'type': 'direct', 'tag': 'direct'}
     ],
     'route': {
