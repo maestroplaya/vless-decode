@@ -36,13 +36,36 @@ if not m:
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# FINAL COMPLIANT CONFIG FOR SING-BOX 1.13.13
+# VLESS outbound (flow is required for xtls-rprx-vision reality links; only
+# set it if the subscription link actually specifies one)
+vless_outbound = {
+    'type': 'vless',
+    'tag': 'proxy',
+    'server': host,
+    'server_port': int(port),
+    'uuid': uuid,
+    'network': 'tcp',
+    'tls': {
+        'enabled': True,
+        'server_name': p.get('sni'),
+        'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
+        'reality': {
+            'enabled': True,
+            'public_key': p.get('pbk'),
+            'short_id': p.get('sid', '')
+        }
+    }
+}
+if p.get('flow'):
+    vless_outbound['flow'] = p['flow']
+
+# CONFIG FOR SING-BOX 1.13.13
 cfg = {
     'log': {'level': 'info'},
     'dns': {
         'servers': [
             {'tag': 'remote', 'type': 'https', 'server': '1.1.1.1', 'path': '/dns-query', 'detour': 'proxy'},
-            {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5', 'detour': 'direct'}
+            {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5'}
         ],
         'final': 'remote',
         'strategy': 'ipv4_only'
@@ -53,37 +76,26 @@ cfg = {
         'interface_name': 'tun0',
         'address': ['172.19.0.1/30'],
         'auto_route': True
-        # FIXED: Removed 'sniff', 'sniff_override_destination', and 'stack'
+        # sniff/resolve/hijack-dns are configured as route.rules actions below
+        # (inbound.sniff was removed/merged into rule actions in sing-box 1.11.0)
     }],
     'outbounds': [
-        {
-            'type': 'vless',
-            'tag': 'proxy',
-            'server': host,
-            'server_port': int(port),
-            'uuid': uuid,
-            'tls': {
-                'enabled': True,
-                'server_name': p.get('sni'),
-                'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
-                'reality': {
-                    'enabled': True,
-                    'public_key': p.get('pbk'),
-                    'short_id': p.get('sid')
-                }
-            }
-        },
+        vless_outbound,
         {'type': 'direct', 'tag': 'direct'}
     ],
     'route': {
         'rules': [
-            # FIXED: Moved sniffing and resolving from 'inbounds' to 'route.rules' as actions
             {'inbound': 'tun-in', 'action': 'sniff'},
             {'inbound': 'tun-in', 'action': 'resolve', 'strategy': 'prefer_ipv4'},
             {'protocol': 'dns', 'action': 'hijack-dns'}
         ],
         'final': 'proxy',
-        'auto_detect_interface': True
+        'auto_detect_interface': True,
+        # Resolve the proxy outbound's own server address (if it's a domain,
+        # not an IP) via the *local* (direct) resolver, not 'remote'.
+        # 'remote' is dialed through 'proxy' itself, so using it here would
+        # create a circular dependency: proxy needs DNS, DNS needs proxy.
+        'default_domain_resolver': 'local'
     }
 }
 
