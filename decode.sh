@@ -36,8 +36,7 @@ if not m:
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# VLESS outbound (flow is required for xtls-rprx-vision reality links; only
-# set it if the subscription link actually specifies one)
+# VLESS outbound
 vless_outbound = {
     'type': 'vless',
     'tag': 'proxy',
@@ -63,8 +62,11 @@ cfg = {
     'log': {'level': 'info'},
     'dns': {
         'servers': [
-            {'tag': 'remote', 'type': 'https', 'server': '1.1.1.1', 'path': '/dns-query', 'detour': 'proxy'},
-            {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5'}
+            # 1. Remote DNS: TCP over the proxy. Safe from interception, avoids nested TLS overhead.
+            {'tag': 'remote', 'type': 'tcp', 'server': '8.8.8.8', 'detour': 'proxy'},
+            # 2. Local DNS: Encrypted DoH. Prevents the ISP from poisoning the proxy's domain resolution.
+            # Explicitly routed 'direct' to avoid a circular dependency loop.
+            {'tag': 'local', 'type': 'https', 'server': '1.1.1.1', 'detour': 'direct'}
         ],
         'final': 'remote',
         'strategy': 'ipv4_only'
