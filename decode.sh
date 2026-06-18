@@ -6,7 +6,7 @@ if [ -z "$1" ]; then
 fi
 
 SUB_URL="$1"
-echo "Downloading, decoding, and generating TUN config for sing-box 1.12+..."
+echo "Downloading, decoding, and generating TUN config for sing-box 1.13.13..."
 
 curl -s -L --compressed "$SUB_URL" | python3 -c "
 import sys, re, json, base64
@@ -29,15 +29,18 @@ except IndexError:
     sys.exit(1)
 
 m = re.match(r'vless://([^@]+)@([^:]+):(\d+)\?([^#]+)', line)
+if not m:
+    print('Error: Failed to parse VLESS URI.', file=sys.stderr)
+    sys.exit(1)
+
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# FINAL COMPLIANT CONFIG (Tested against sing-box 1.12, 1.13, and 1.14 specs)
+# FINAL COMPLIANT CONFIG FOR SING-BOX 1.13.13
 cfg = {
     'log': {'level': 'info'},
     'dns': {
         'servers': [
-            # Added 'detour': 'proxy' so DNS actually goes through the VPN
             {'tag': 'remote', 'type': 'https', 'server': '1.1.1.1', 'path': '/dns-query', 'detour': 'proxy'},
             {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5', 'detour': 'direct'}
         ],
@@ -48,11 +51,9 @@ cfg = {
         'type': 'tun',
         'tag': 'tun-in',
         'interface_name': 'tun0',
-        'address': ['172.19.0.1/30'], # FIXED: Replaced legacy inet4_address with address array
-        'auto_route': True,
-        'stack': 'system',
-        'sniff': True,
-        'sniff_override_destination': True # ADDED: Prevents routing leaks when sniffing
+        'address': ['172.19.0.1/30'],
+        'auto_route': True
+        # FIXED: Removed 'sniff', 'sniff_override_destination', and 'stack'
     }],
     'outbounds': [
         {
@@ -72,12 +73,16 @@ cfg = {
                 }
             }
         },
-        {'type': 'direct', 'tag': 'direct'},
-        {'type': 'block', 'tag': 'block'}
+        {'type': 'direct', 'tag': 'direct'}
     ],
     'route': {
-        'rules': [{'action': 'hijack-dns'}],
-        'final': 'proxy', # ADDED: Explicitly routes all non-DNS traffic to the proxy
+        'rules': [
+            # FIXED: Moved sniffing and resolving from 'inbounds' to 'route.rules' as actions
+            {'inbound': 'tun-in', 'action': 'sniff'},
+            {'inbound': 'tun-in', 'action': 'resolve', 'strategy': 'prefer_ipv4'},
+            {'protocol': 'dns', 'action': 'hijack-dns'}
+        ],
+        'final': 'proxy',
         'auto_detect_interface': True
     }
 }
