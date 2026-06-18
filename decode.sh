@@ -6,7 +6,7 @@ if [ -z "$1" ]; then
 fi
 
 SUB_URL="$1"
-echo "Downloading, decoding, and generating TUN config..."
+echo "Downloading, decoding, and generating TUN config for sing-box 1.12+..."
 
 curl -s -L --compressed "$SUB_URL" | python3 -c "
 import sys, re, json, base64
@@ -32,13 +32,14 @@ m = re.match(r'vless://([^@]+)@([^:]+):(\d+)\?([^#]+)', line)
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# Generate System-Wide TUN Configuration
+# Generate System-Wide TUN Configuration (Updated for sing-box 1.12+)
 cfg = {
     'log': {'level': 'info'},
     'dns': {
         'servers': [
-            {'tag': 'remote', 'address': 'https://1.1.1.1/dns-query'},
-            {'tag': 'local', 'address': '223.5.5.5', 'detour': 'direct'}
+            # NEW FORMAT: Split into 'type', 'server', and 'path'
+            {'tag': 'remote', 'type': 'https', 'server': '1.1.1.1', 'path': '/dns-query'},
+            {'tag': 'local', 'type': 'udp', 'server': '223.5.5.5', 'detour': 'direct'}
         ],
         'rules': [{'outbound': 'any', 'server': 'remote'}],
         'strategy': 'ipv4_only'
