@@ -50,7 +50,6 @@ vless_outbound = {
         'server_name': p.get('sni'),
         'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
         'reality': {
-            'enabled': True,
             'public_key': p.get('pbk'),
             'short_id': p.get('sid', '')
         }
@@ -75,9 +74,9 @@ cfg = {
         'tag': 'tun-in',
         'interface_name': 'tun0',
         'address': ['172.19.0.1/30'],
-        'auto_route': True
-        # sniff/resolve/hijack-dns are configured as route.rules actions below
-        # (inbound.sniff was removed/merged into rule actions in sing-box 1.11.0)
+        'auto_route': True,
+        'strict_route': True,
+        'mtu': 1350
     }],
     'outbounds': [
         vless_outbound,
@@ -86,15 +85,12 @@ cfg = {
     'route': {
         'rules': [
             {'inbound': 'tun-in', 'action': 'sniff'},
-            {'inbound': 'tun-in', 'action': 'resolve', 'strategy': 'prefer_ipv4'},
-            {'protocol': 'dns', 'action': 'hijack-dns'}
+            {'inbound': 'tun-in', 'action': 'resolve'},
+            {'protocol': 'dns', 'action': 'hijack-dns'},
+            {'port': 123, 'network': 'udp', 'outbound': 'direct'}
         ],
         'final': 'proxy',
         'auto_detect_interface': True,
-        # Resolve the proxy outbound's own server address (if it's a domain,
-        # not an IP) via the *local* (direct) resolver, not 'remote'.
-        # 'remote' is dialed through 'proxy' itself, so using it here would
-        # create a circular dependency: proxy needs DNS, DNS needs proxy.
         'default_domain_resolver': 'local'
     }
 }
