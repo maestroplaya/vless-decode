@@ -6,8 +6,9 @@ if [ -z "$1" ]; then
 fi
 
 SUB_URL="$1"
-echo "Downloading, decoding, and generating TUN config for sing-box 1.13.13..."
+echo "Generating fixed config..."
 
+# We decode the URL once and pass the parameters to the template
 curl -s -L --compressed "$SUB_URL" | python3 -c "
 import sys, re, json, base64
 from urllib.parse import parse_qsl
@@ -15,28 +16,17 @@ from urllib.parse import parse_qsl
 raw = sys.stdin.read().strip()
 raw = raw.replace('-', '+').replace('_', '/')
 raw += '=' * (-len(raw) % 4)
-
 try:
     decoded = base64.b64decode(raw).decode('utf-8')
-except Exception:
+except:
     decoded = raw
 
-lines = decoded.split('\n')
-try:
-    line = [l for l in lines if l.startswith('vless://') and 'reality' in l and 'type=tcp' in l][0]
-except IndexError:
-    print('Error: No matching vless:// reality tcp link found.', file=sys.stderr)
-    sys.exit(1)
-
+line = [l for l in decoded.split('\n') if l.startswith('vless://') and 'reality' in l][0]
 m = re.match(r'vless://([^@]+)@([^:]+):(\d+)\?([^#]+)', line)
-if not m:
-    print('Error: Failed to parse VLESS URI.', file=sys.stderr)
-    sys.exit(1)
-
 uuid, host, port, qs = m.groups()
 p = dict(parse_qsl(qs))
 
-# CONFIG FOR SING-BOX 1.13.13
+# Generate JSON
 cfg = {
     'log': {'level': 'info'},
     'dns': {
@@ -57,6 +47,7 @@ cfg = {
         'mtu': 1350
     }],
     'outbounds': [
+        {'type': 'direct', 'tag': 'direct'},
         {
             'type': 'vless',
             'tag': 'proxy',
@@ -69,13 +60,9 @@ cfg = {
                 'enabled': True,
                 'server_name': p.get('sni'),
                 'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
-                'reality': {
-                    'public_key': p.get('pbk'),
-                    'short_id': p.get('sid', '')
-                }
+                'reality': {'public_key': p.get('pbk'), 'short_id': p.get('sid', '')}
             }
-        },
-        {'type': 'direct', 'tag': 'direct'}
+        }
     ],
     'route': {
         'rules': [
@@ -85,12 +72,10 @@ cfg = {
             {'port': 123, 'network': 'udp', 'outbound': 'direct'}
         ],
         'final': 'proxy',
-        'auto_detect_interface': True,
-        'default_domain_resolver': 'local'
+        'auto_detect_interface': True
     }
 }
-
 print(json.dumps(cfg, indent=2))
 " > cfg.json
 
-echo "Done! System-wide config saved to cfg.json"
+echo "Config generated. Run with: sudo sing-box run -c cfg.json"
