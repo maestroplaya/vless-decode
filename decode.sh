@@ -6,7 +6,7 @@ if [ -z "$1" ]; then
 fi
 
 SUB_URL="$1"
-echo "Generating fixed config for sing-box 1.13.13..."
+echo "Generating config for sing-box 1.13.x ..."
 
 curl -s -L --compressed "$SUB_URL" | python3 -c "
 import sys, re, json, base64
@@ -46,7 +46,7 @@ vless_outbound = {
         'server_name': p.get('sni'),
         'utls': {'enabled': True, 'fingerprint': p.get('fp', 'chrome')},
         'reality': {
-            'enabled': True,                 # FIX: was missing -> reality was silently inert
+            'enabled': True,
             'public_key': p.get('pbk'),
             'short_id': p.get('sid', '')
         }
@@ -61,9 +61,6 @@ cfg = {
         'servers': [
             {'tag': 'remote', 'type': 'tcp', 'server': '8.8.8.8', 'detour': 'proxy'},
             {'tag': 'local', 'type': 'https', 'server': '1.1.1.1'}
-            # FIX: removed 'detour': 'direct' here -> pointing at a bare/empty
-            # direct outbound is rejected by 1.13.13 ('detour to an empty
-            # direct outbound makes no sense'). Omitting it = direct by default.
         ],
         'final': 'remote',
         'strategy': 'ipv4_only'
@@ -86,14 +83,11 @@ cfg = {
             {'inbound': 'tun-in', 'action': 'sniff'},
             {'inbound': 'tun-in', 'action': 'resolve'},
             {'protocol': 'dns', 'action': 'hijack-dns'},
-            {'port': 123, 'network': 'udp', 'outbound': 'direct'}
+            {'port': 123, 'network': 'udp', 'outbound': 'direct'}, # NTP
+            {'port': 443, 'network': 'udp', 'outbound': 'block'}   # Kill QUIC, force TCP fallback
         ],
         'final': 'proxy',
         'auto_detect_interface': True,
-        # FIX: this is the exact thing your screenshot's FATAL is about.
-        # Resolves the proxy server's own address (if it's a domain) via the
-        # 'local' resolver instead of 'remote' (which dials through 'proxy'
-        # itself -> circular dependency).
         'default_domain_resolver': 'local'
     }
 }
